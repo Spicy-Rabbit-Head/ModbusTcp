@@ -50,40 +50,56 @@ public enum FunctionCode
     /// <summary>
     /// 读取线圈
     /// </summary>
-    READING_COIL = 1,
+    READING_COIL = 0x01,
 
     /// <summary>
     /// 读取离散输入
     /// </summary>
-    READING_DISCRETE_INPUT = 2,
+    READING_DISCRETE_INPUT = 0x02,
 
     /// <summary>
     /// 读取保持寄存器
     /// </summary>
-    READING_HOLDING_REGISTER = 3,
+    READING_HOLDING_REGISTER = 0x03,
 
     /// <summary>
     /// 读取输入寄存器
     /// </summary>
-    READING_INPUT_REGISTER = 4,
+    READING_INPUT_REGISTER = 0x04,
 
     /// <summary>
     /// 写入单个线圈
     /// </summary>
-    WRITING_SINGLE_COIL = 5,
+    WRITING_SINGLE_COIL = 0x05,
 
     /// <summary>
     /// 写入单个寄存器
     /// </summary>
-    WRITING_SINGLE_REGISTER = 6,
+    WRITING_SINGLE_REGISTER = 0x06,
 
     /// <summary>
     /// 写入多个线圈
     /// </summary>
-    WRITING_MULTIPLE_COILS = 15,
+    WRITING_MULTIPLE_COILS = 0x0F,
 
     /// <summary>
     /// 写入多个寄存器
     /// </summary>
-    WRITING_MULTIPLE_REGISTERS = 16
+    WRITING_MULTIPLE_REGISTERS = 0x10
+}
+
+/// <summary>
+/// 寄存器排序方式
+/// </summary>
+public enum RegisterOrder
+{
+    /// <summary>
+    /// 低位在前，高位在后
+    /// </summary>
+    LowHigh,
+
+    /// <summary>
+    /// 高位在前，低位在后
+    /// </summary>
+    HighLow,
 }

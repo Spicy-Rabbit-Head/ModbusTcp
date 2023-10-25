@@ -34,9 +34,11 @@ public enum DataType
 }
 
 /// <summary>
-/// bit位开关状态，on=1，off=0
+/// 线圈开关状态
 /// </summary>
-public enum BitState
+/// 1：ON <br/>
+/// 0：OFF
+public enum CoilStatus
 {
     ON = 1,
     OFF = 0

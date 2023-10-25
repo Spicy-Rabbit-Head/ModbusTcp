@@ -176,8 +176,8 @@ public class ModbusTcpClient : IDisposable
         try
         {
             Console.WriteLine("等待接收数据");
-            var length = stream.Read(receiveBytes, 0, 10);
-            Console.WriteLine(length);
+            var length = stream.Read(receiveBytes, 0, receiveBytes.Length);
+            Console.WriteLine("接收到的数据长度：" + length);
             // 读取不到数据时、网络连接异常、数据读取不完整 就跳出
             Console.WriteLine(receiveBytes);
 
@@ -191,38 +191,360 @@ public class ModbusTcpClient : IDisposable
     }
 
     /// <summary>
-    /// 读取寄存器
-    /// <param name="slaveAddress">从站地址</param>
-    /// <param name="startAddress">寄存器起始地址</param>
-    /// <param name="count">读取寄存器数量</param>
+    /// 读取
     /// </summary>
-    public void ReadRegister(byte slaveAddress, ushort startAddress, ushort count)
+    public void Read(FunctionCode functionCode, ushort startAddress, ushort count)
     {
-        modbusCommand.DefaultStationNumber = slaveAddress;
-        ReadRegister(slaveAddress, count);
+        switch (functionCode)
+        {
+            case FunctionCode.READING_COIL:
+                break;
+            case FunctionCode.READING_DISCRETE_INPUT:
+                break;
+            case FunctionCode.READING_HOLDING_REGISTER:
+                break;
+            case FunctionCode.READING_INPUT_REGISTER:
+                break;
+            case FunctionCode.WRITING_SINGLE_COIL:
+                break;
+            case FunctionCode.WRITING_SINGLE_REGISTER:
+                break;
+            case FunctionCode.WRITING_MULTIPLE_COILS:
+                break;
+            case FunctionCode.WRITING_MULTIPLE_REGISTERS:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(functionCode), functionCode, "无效的功能码");
+        }
     }
 
     /// <summary>
-    /// 读取寄存器
-    /// <param name="startAddress">寄存器起始地址</param>
-    /// <param name="count">读取寄存器数量</param>
+    /// 读取线圈
     /// </summary>
-    public void ReadRegister(ushort startAddress, ushort count)
+    /// <param name="startAddress">线圈起始地址</param>
+    /// <param name="quantity">读取线圈数量</param>
+    /// <returns>线圈状态</returns>
+    public bool[] ReadCoil(ushort startAddress, ushort quantity)
     {
-        var command = modbusCommand.GenerateCommand(FunctionCode.READING_INPUT_REGISTER, startAddress, count);
+        var command = modbusCommand.GenerateCommand(FunctionCode.READING_COIL, startAddress, quantity);
+        Console.WriteLine("发送的数据");
         foreach (var b in command)
         {
             Console.WriteLine(b);
         }
 
-        SendData(command);
+        if (!SendData(command))
+        {
+            Console.WriteLine("发送失败");
+            return Array.Empty<bool>();
+        }
+
         Thread.Sleep(10);
-        var buffer = new byte[2100];
+        var buffer = new byte[10 + quantity / 8];
         var receiveData = ReceiveData(buffer);
-        Console.WriteLine(receiveData);
+        Console.WriteLine("接收状态：" + receiveData);
+        Console.WriteLine("接收的数据");
         foreach (var b in buffer)
         {
             Console.WriteLine(b);
         }
+
+        Console.WriteLine("转换后的数据");
+        var result = new bool[quantity];
+        for (var i = 0; i < quantity; i++)
+        {
+            result[i] = (buffer[9 + i / 8] & (1 << (i % 8))) != 0;
+        }
+
+        foreach (var b in result)
+        {
+            Console.WriteLine(b);
+        }
+
+        return Array.Empty<bool>();
+    }
+
+    /// <summary>
+    /// 读取离散输入寄存器
+    /// </summary>
+    /// <param name="startAddress">离散输入起始地址</param>
+    /// <param name="quantity">读取离散输入数量</param>
+    /// <returns>离散输入状态</returns>
+    public bool[] ReadDiscreteInput(ushort startAddress, ushort quantity)
+    {
+        var command = modbusCommand.GenerateCommand(FunctionCode.READING_DISCRETE_INPUT, startAddress, quantity);
+        Console.WriteLine("发送的数据");
+        foreach (var b in command)
+        {
+            Console.WriteLine(b);
+        }
+
+        if (!SendData(command))
+        {
+            Console.WriteLine("发送失败");
+            return Array.Empty<bool>();
+        }
+
+        Thread.Sleep(10);
+        var buffer = new byte[10 + quantity / 8];
+        var receiveData = ReceiveData(buffer);
+        Console.WriteLine("接收状态：" + receiveData);
+        Console.WriteLine("接收的数据");
+        foreach (var b in buffer)
+        {
+            Console.WriteLine(b);
+        }
+
+        Console.WriteLine("转换后的数据");
+        var result = new bool[quantity];
+        for (var i = 0; i < quantity; i++)
+        {
+            result[i] = (buffer[9 + i / 8] & (1 << (i % 8))) != 0;
+        }
+
+        foreach (var b in result)
+        {
+            Console.WriteLine(b);
+        }
+
+        return Array.Empty<bool>();
+    }
+
+
+    /// <summary>
+    /// 读取保持寄存器
+    /// <param name="startAddress">寄存器起始地址</param>
+    /// <param name="quantity">读取寄存器数量</param>
+    /// </summary>
+    public void ReadHoldingRegister(ushort startAddress, ushort quantity)
+    {
+        var command = modbusCommand.GenerateCommand(FunctionCode.READING_HOLDING_REGISTER, startAddress, quantity);
+        Console.WriteLine("发送的数据");
+        foreach (var b in command)
+        {
+            Console.WriteLine(b);
+        }
+
+        if (!SendData(command))
+        {
+            Console.WriteLine("发送失败");
+            return;
+        }
+
+        Thread.Sleep(10);
+        var buffer = new byte[9 + 2 * quantity];
+        var receiveData = ReceiveData(buffer);
+        Console.WriteLine("接收状态：" + receiveData);
+        Console.WriteLine("接收的数据");
+        foreach (var b in buffer)
+        {
+            Console.WriteLine(b);
+        }
+
+        Console.WriteLine("转换后的数据");
+        var result = new int[quantity];
+        for (var i = 0; i < quantity; i++)
+        {
+            var value = (buffer[9 + i * 2] << 8) | buffer[10 + i * 2];
+            if ((buffer[9] & 0x80) != 0) value = -value;
+            result[i] = value;
+        }
+
+        foreach (var value in result)
+        {
+            Console.WriteLine(value);
+        }
+    }
+
+    /// <summary>
+    /// 读取输入寄存器
+    /// </summary>
+    /// <param name="startAddress">寄存器起始地址</param>
+    /// <param name="quantity">读取寄存器数量</param>
+    /// <returns>寄存器值</returns>
+    public short ReadInputRegister(ushort startAddress, ushort quantity)
+    {
+        var command = modbusCommand.GenerateCommand(FunctionCode.READING_INPUT_REGISTER, startAddress, quantity);
+        Console.WriteLine("发送的数据");
+        foreach (var b in command)
+        {
+            Console.WriteLine(b);
+        }
+
+        if (!SendData(command))
+        {
+            Console.WriteLine("发送失败");
+            return 0;
+        }
+
+        Thread.Sleep(10);
+        var buffer = new byte[9 + 2 * quantity];
+        var receiveData = ReceiveData(buffer);
+        Console.WriteLine("接收状态：" + receiveData);
+        Console.WriteLine("接收的数据");
+        foreach (var b in buffer)
+        {
+            Console.WriteLine(b);
+        }
+
+        Console.WriteLine("转换后的数据");
+        var result = new int[quantity];
+        for (var i = 0; i < quantity; i++)
+        {
+            var value = (buffer[9 + i * 2] << 8) | buffer[10 + i * 2];
+            if ((buffer[9] & 0x80) != 0) value = -value;
+            result[i] = value;
+        }
+
+        foreach (var value in result)
+        {
+            Console.WriteLine(value);
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// 写入单个线圈
+    /// </summary>
+    /// <param name="address">线圈地址</param>
+    /// <param name="status">线圈值</param>
+    /// <returns>是否写入成功</returns>
+    public bool WriteSingleCoil(ushort address, CoilStatus status)
+    {
+        var command = modbusCommand.GenerateCommand(FunctionCode.WRITING_SINGLE_COIL, address, status);
+        Console.WriteLine("发送的数据");
+        foreach (var b in command)
+        {
+            Console.WriteLine(b);
+        }
+
+        if (!SendData(command))
+        {
+            Console.WriteLine("发送失败");
+            return false;
+        }
+
+        Thread.Sleep(10);
+        var buffer = new byte[12];
+        var receiveData = ReceiveData(buffer);
+        Console.WriteLine("接收状态：" + receiveData);
+        Console.WriteLine("接收的数据");
+        foreach (var b in buffer)
+        {
+            Console.WriteLine(b);
+        }
+
+        Console.WriteLine("转换后的数据");
+        if (buffer.Where((t, i) => t != command[i]).Any())
+        {
+            Console.WriteLine("写入失败");
+            return false;
+        }
+
+        Console.WriteLine("写入成功");
+
+        return true;
+    }
+
+    /// <summary>
+    /// 写入单个保持寄存器
+    /// </summary>
+    /// <param name="address">寄存器地址</param>
+    /// <param name="value">寄存器值</param>
+    /// <returns>是否写入成功</returns>
+    public bool WriteSingleRegister(ushort address, short value)
+    {
+        var command = modbusCommand.GenerateCommand(FunctionCode.WRITING_SINGLE_REGISTER, address, (ushort)value);
+        Console.WriteLine("发送的数据");
+        foreach (var b in command)
+        {
+            Console.WriteLine(b);
+        }
+
+        if (!SendData(command))
+        {
+            Console.WriteLine("发送失败");
+            return false;
+        }
+
+        Thread.Sleep(10);
+        var buffer = new byte[12];
+        var receiveData = ReceiveData(buffer);
+        Console.WriteLine("接收状态：" + receiveData);
+        Console.WriteLine("接收的数据");
+        foreach (var b in buffer)
+        {
+            Console.WriteLine(b);
+        }
+
+        Console.WriteLine("转换后的数据");
+        if (buffer.Where((t, i) => t != command[i]).Any())
+        {
+            Console.WriteLine("写入失败");
+            return false;
+        }
+
+        Console.WriteLine("写入成功");
+
+        return true;
+    }
+
+    /// <summary>
+    /// 写入多个线圈 <br />
+    /// 并设定为一致的值
+    /// </summary>
+    /// <param name="address">线圈起始地址</param>
+    /// <param name="quantity">线圈数量</param>
+    /// <param name="status">线圈值</param>
+    /// <returns>是否写入成功</returns>
+    public bool WriteMultipleCoils(ushort address, ushort quantity, CoilStatus status)
+    {
+        var boolArray = new bool[quantity];
+        Array.Fill(boolArray, status == CoilStatus.ON);
+        return WriteMultipleCoils(address, boolArray);
+    }
+
+    /// <summary>
+    /// 写入多个线圈
+    /// </summary>
+    /// <param name="address">线圈起始地址</param>
+    /// <param name="status">线圈值</param>
+    /// <returns>是否写入成功</returns>
+    public bool WriteMultipleCoils(ushort address, bool[] status)
+    {
+        // var command = modbusCommand.GenerateCommand(FunctionCode.WRITING_MULTIPLE_COILS, address, status);
+        Console.WriteLine("发送的数据");
+        // foreach (var b in command)
+        // {
+        //     Console.WriteLine(b);
+        // }
+
+        // if (!SendData(command))
+        // {
+        //     Console.WriteLine("发送失败");
+        //     return false;
+        // }
+        //
+        // Thread.Sleep(10);
+        // var buffer = new byte[12];
+        // var receiveData = ReceiveData(buffer);
+        // Console.WriteLine("接收状态：" + receiveData);
+        // Console.WriteLine("接收的数据");
+        // foreach (var b in buffer)
+        // {
+        //     Console.WriteLine(b);
+        // }
+        //
+        // Console.WriteLine("转换后的数据");
+        // if (buffer.Where((t, i) => t != command[i]).Any())
+        // {
+        //     Console.WriteLine("写入失败");
+        //     return false;
+        // }
+        //
+        // Console.WriteLine("写入成功");
+
+        return true;
     }
 }

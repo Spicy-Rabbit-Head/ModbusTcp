@@ -49,18 +49,6 @@ public class ModbusCommand
     /// 生成 Modbus 命令
     /// </summary>
     /// <param name="functionCodeEnum">功能码枚举</param>
-    /// <param name="start">写入的起始点</param>
-    /// <param name="status">写入的状态数组</param>
-    /// <returns>Modbus 命令</returns>
-    // public byte[] GenerateCommand(FunctionCode functionCodeEnum, ushort start, bool[] status)
-    // {
-    //     return GenerateCommand(functionCodeEnum, start, status == CoilStatus.ON ? (ushort)0xFF00 : (ushort)0x0000);
-    // }
-
-    /// <summary>
-    /// 生成 Modbus 命令
-    /// </summary>
-    /// <param name="functionCodeEnum">功能码枚举</param>
     /// <param name="start">起始点</param>
     /// <param name="data">数据</param>
     /// <returns>Modbus 命令</returns>
@@ -75,9 +63,9 @@ public class ModbusCommand
             var command = new List<byte>();
             // 生成 Modbus 命令头
             GenerateCommandHead(command);
-            // 添加数据
             // 起始地址高低位
             command.AddRange(CalculateHighLow(start));
+            // 添加数据
             // 读取的位数高低位
             command.AddRange(CalculateHighLow(data));
 
@@ -88,6 +76,52 @@ public class ModbusCommand
             return Array.Empty<byte>();
         }
     }
+
+    // TODO: 生成 Modbus 命令
+    /// <summary>
+    /// 生成 Modbus 命令
+    /// </summary>
+    /// <param name="functionCodeEnum">功能码枚举</param>
+    /// <param name="start">起始点</param>
+    /// <param name="quantity">数量</param>
+    /// <param name="data">数据</param>
+    public byte[] GenerateCommand(FunctionCode functionCodeEnum, ushort start, ushort quantity, bool[] data)
+    {
+        if (quantity != data.Length)
+        {
+            throw new Exception("读取的数量和数据长度不一致");
+        }
+
+        try
+        {
+            // 功能码
+            functionCode = (byte)functionCodeEnum;
+            // 长度
+            var num = quantity % 8 != 0 ? checked((byte)(quantity / 8 + 1)) : checked((byte)(quantity / 8));
+            length = (ushort)(7 + num);
+            Console.WriteLine($"length: {length}");
+            var command = new List<byte>();
+            // 生成 Modbus 命令头
+            GenerateCommandHead(command);
+            // 起始地址高低位
+            command.AddRange(CalculateHighLow(start));
+            // 地址数量高低位
+            command.AddRange(CalculateHighLow(quantity));
+            // 字节计数
+            command.Add(num);
+            var boolArrayToByteArray = BoolArrayToByteArray(data, start, quantity, num);
+
+            // 添加数据
+            command.AddRange(boolArrayToByteArray);
+
+            return command.ToArray();
+        }
+        catch (Exception)
+        {
+            return Array.Empty<byte>();
+        }
+    }
+
 
     /// <summary>
     /// 生成 Modbus 命令头
@@ -131,6 +165,49 @@ public class ModbusCommand
             default:
                 return 0;
         }
+    }
+
+    /// <summary>
+    /// 将输入的 bool 数组转换为 对应地址的 byte 数组
+    /// </summary>
+    /// <param name="data">bool 数组</param>
+    /// <param name="start">起始地址</param>
+    /// <param name="quantity">写入数量</param>
+    /// <param name="byteBit">字节位</param>
+    /// <returns>byte 数组</returns>
+    private static IEnumerable<byte> BoolArrayToByteArray(bool[] data, ushort start, ushort quantity, ushort byteBit)
+    {
+        // 定义一个 byte 数组来存储结果
+    var bytes = new byte[byteBit];
+
+    // 遍历 bool 数组
+    for (var i = 0; i < quantity; i++)
+    {
+        // 获取 bool 值
+        var value = data[i];
+
+        // 将 bool 值转换为 byte
+        var byteValue = (byte)(value ? 1 : 0);
+
+        // 将 byte 值写入 bytes 数组
+        var byteIndex = i / 8;
+        var bitIndex = i % 8;
+        if (byteIndex < bytes.Length)
+        {
+            bytes[byteIndex] |= (byte)(byteValue << bitIndex);
+        }
+    }
+
+    // 将 bytes 数组左移 startAddress 位
+    for (var i = 0; i < bytes.Length; i++)
+    {
+        if (i >= start)
+        {
+            bytes[i] <<= start;
+        }
+    }
+
+    return bytes;
     }
 
     /// <summary>

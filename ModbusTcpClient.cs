@@ -10,7 +10,7 @@ public class ModbusTcpClient : IDisposable
     /// <summary>
     /// TCP 客户端
     /// </summary>
-    private readonly TcpClient client = new();
+    private TcpClient client = new();
 
     /// <summary>
     /// 默认IP地址 <br />
@@ -38,7 +38,17 @@ public class ModbusTcpClient : IDisposable
     /// <summary>
     /// Modbus 命令
     /// </summary>
-    private ModbusCommand modbusCommand = new();
+    private readonly ModbusCommand modbusCommand = new();
+
+    /// <summary>
+    /// 监听线程
+    /// </summary>
+    private Thread listening;
+
+    /// <summary>
+    /// 线程状态
+    /// </summary>
+    private bool threadStatus = false;
 
     /// <summary>
     /// 连接到 PLC Modbus TCP 服务器
@@ -53,11 +63,12 @@ public class ModbusTcpClient : IDisposable
         {
             // 检查 PLC 是否在线
             if (!ExamineClass.PingExamine(ip, timeout)) return false;
-
+            client = new TcpClient();
             // 连接 PLC
             client.Connect(ip, port);
             stream = client.GetStream();
             Console.WriteLine("连接成功");
+            ValidateConnection(8000, Reconnect);
 
             return true;
         }
@@ -65,6 +76,50 @@ public class ModbusTcpClient : IDisposable
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// 重新连接
+    /// </summary>
+    /// <returns>是否连接成功</returns>
+    private void Reconnect()
+    {
+        threadStatus = false;
+        client.Close();
+        stream.Close();
+        Link();
+    }
+
+    /// <summary>
+    /// 验证连接是否可用
+    /// </summary>
+    public void ValidateConnection(int interval, Action onFailure)
+    {
+        threadStatus = true;
+        // 创建一个新的线程来定时验证连接
+        listening = new Thread(() =>
+        {
+            while (threadStatus)
+            {
+                try
+                {
+                    // 验证连接
+                    if (!client.Connected) throw new Exception();
+                    if (!ExamineClass.PingExamine(DefaultIpAddress, DefaultTimeout)) throw new Exception();
+
+                    // 休眠指定的时间间隔
+                    Thread.Sleep(interval);
+                }
+                catch (Exception)
+                {
+                    // 连接验证失败，执行 onFailure 方法
+                    onFailure();
+                }
+            }
+        });
+        listening.IsBackground = true;
+        // 启动线程
+        listening.Start();
     }
 
     /// <summary>
@@ -227,27 +282,16 @@ public class ModbusTcpClient : IDisposable
     public bool[] ReadCoil(ushort startAddress, ushort quantity)
     {
         var command = modbusCommand.GenerateCommand(FunctionCode.READING_COIL, startAddress, quantity);
-        Console.WriteLine("发送的数据");
-        foreach (var b in command)
-        {
-            Console.WriteLine(b);
-        }
 
         if (!SendData(command))
         {
-            Console.WriteLine("发送失败");
+            // 发送失败
             return Array.Empty<bool>();
         }
 
         Thread.Sleep(10);
         var buffer = new byte[10 + quantity / 8];
-        var receiveData = ReceiveData(buffer);
-        Console.WriteLine("接收状态：" + receiveData);
-        Console.WriteLine("接收的数据");
-        foreach (var b in buffer)
-        {
-            Console.WriteLine(b);
-        }
+        ReceiveData(buffer);
 
         Console.WriteLine("转换后的数据");
         var result = new bool[quantity];
@@ -256,12 +300,7 @@ public class ModbusTcpClient : IDisposable
             result[i] = (buffer[9 + i / 8] & (1 << (i % 8))) != 0;
         }
 
-        foreach (var b in result)
-        {
-            Console.WriteLine(b);
-        }
-
-        return Array.Empty<bool>();
+        return result;
     }
 
     /// <summary>
@@ -273,41 +312,23 @@ public class ModbusTcpClient : IDisposable
     public bool[] ReadDiscreteInput(ushort startAddress, ushort quantity)
     {
         var command = modbusCommand.GenerateCommand(FunctionCode.READING_DISCRETE_INPUT, startAddress, quantity);
-        Console.WriteLine("发送的数据");
-        foreach (var b in command)
-        {
-            Console.WriteLine(b);
-        }
 
         if (!SendData(command))
         {
-            Console.WriteLine("发送失败");
             return Array.Empty<bool>();
         }
 
         Thread.Sleep(10);
         var buffer = new byte[10 + quantity / 8];
-        var receiveData = ReceiveData(buffer);
-        Console.WriteLine("接收状态：" + receiveData);
-        Console.WriteLine("接收的数据");
-        foreach (var b in buffer)
-        {
-            Console.WriteLine(b);
-        }
+        ReceiveData(buffer);
 
-        Console.WriteLine("转换后的数据");
         var result = new bool[quantity];
         for (var i = 0; i < quantity; i++)
         {
             result[i] = (buffer[9 + i / 8] & (1 << (i % 8))) != 0;
         }
 
-        foreach (var b in result)
-        {
-            Console.WriteLine(b);
-        }
-
-        return Array.Empty<bool>();
+        return result;
     }
 
 
@@ -316,32 +337,19 @@ public class ModbusTcpClient : IDisposable
     /// <param name="startAddress">寄存器起始地址</param>
     /// <param name="quantity">读取寄存器数量</param>
     /// </summary>
-    public void ReadHoldingRegister(ushort startAddress, ushort quantity)
+    public int[] ReadHoldingRegister(ushort startAddress, ushort quantity)
     {
         var command = modbusCommand.GenerateCommand(FunctionCode.READING_HOLDING_REGISTER, startAddress, quantity);
-        Console.WriteLine("发送的数据");
-        foreach (var b in command)
-        {
-            Console.WriteLine(b);
-        }
 
         if (!SendData(command))
         {
-            Console.WriteLine("发送失败");
-            return;
+            return Array.Empty<int>();
         }
 
         Thread.Sleep(10);
         var buffer = new byte[9 + 2 * quantity];
-        var receiveData = ReceiveData(buffer);
-        Console.WriteLine("接收状态：" + receiveData);
-        Console.WriteLine("接收的数据");
-        foreach (var b in buffer)
-        {
-            Console.WriteLine(b);
-        }
+        ReceiveData(buffer);
 
-        Console.WriteLine("转换后的数据");
         var result = new int[quantity];
         for (var i = 0; i < quantity; i++)
         {
@@ -350,10 +358,7 @@ public class ModbusTcpClient : IDisposable
             result[i] = value;
         }
 
-        foreach (var value in result)
-        {
-            Console.WriteLine(value);
-        }
+        return result;
     }
 
     /// <summary>
@@ -362,32 +367,18 @@ public class ModbusTcpClient : IDisposable
     /// <param name="startAddress">寄存器起始地址</param>
     /// <param name="quantity">读取寄存器数量</param>
     /// <returns>寄存器值</returns>
-    public short ReadInputRegister(ushort startAddress, ushort quantity)
+    public int[] ReadInputRegister(ushort startAddress, ushort quantity)
     {
         var command = modbusCommand.GenerateCommand(FunctionCode.READING_INPUT_REGISTER, startAddress, quantity);
-        Console.WriteLine("发送的数据");
-        foreach (var b in command)
-        {
-            Console.WriteLine(b);
-        }
 
         if (!SendData(command))
         {
-            Console.WriteLine("发送失败");
-            return 0;
+            return Array.Empty<int>();
         }
 
         Thread.Sleep(10);
         var buffer = new byte[9 + 2 * quantity];
-        var receiveData = ReceiveData(buffer);
-        Console.WriteLine("接收状态：" + receiveData);
-        Console.WriteLine("接收的数据");
-        foreach (var b in buffer)
-        {
-            Console.WriteLine(b);
-        }
-
-        Console.WriteLine("转换后的数据");
+        ReceiveData(buffer);
         var result = new int[quantity];
         for (var i = 0; i < quantity; i++)
         {
@@ -396,12 +387,7 @@ public class ModbusTcpClient : IDisposable
             result[i] = value;
         }
 
-        foreach (var value in result)
-        {
-            Console.WriteLine(value);
-        }
-
-        return 0;
+        return result;
     }
 
     /// <summary>
@@ -413,38 +399,17 @@ public class ModbusTcpClient : IDisposable
     public bool WriteSingleCoil(ushort address, CoilStatus status)
     {
         var command = modbusCommand.GenerateCommand(FunctionCode.WRITING_SINGLE_COIL, address, status);
-        Console.WriteLine("发送的数据");
-        foreach (var b in command)
-        {
-            Console.WriteLine(b);
-        }
 
         if (!SendData(command))
         {
-            Console.WriteLine("发送失败");
             return false;
         }
 
         Thread.Sleep(10);
         var buffer = new byte[12];
-        var receiveData = ReceiveData(buffer);
-        Console.WriteLine("接收状态：" + receiveData);
-        Console.WriteLine("接收的数据");
-        foreach (var b in buffer)
-        {
-            Console.WriteLine(b);
-        }
+        ReceiveData(buffer);
 
-        Console.WriteLine("转换后的数据");
-        if (buffer.Where((t, i) => t != command[i]).Any())
-        {
-            Console.WriteLine("写入失败");
-            return false;
-        }
-
-        Console.WriteLine("写入成功");
-
-        return true;
+        return !buffer.Where((t, i) => t != command[i]).Any();
     }
 
     /// <summary>
@@ -456,38 +421,16 @@ public class ModbusTcpClient : IDisposable
     public bool WriteSingleRegister(ushort address, short value)
     {
         var command = modbusCommand.GenerateCommand(FunctionCode.WRITING_SINGLE_REGISTER, address, (ushort)value);
-        Console.WriteLine("发送的数据");
-        foreach (var b in command)
-        {
-            Console.WriteLine(b);
-        }
 
         if (!SendData(command))
         {
-            Console.WriteLine("发送失败");
             return false;
         }
 
         Thread.Sleep(10);
         var buffer = new byte[12];
-        var receiveData = ReceiveData(buffer);
-        Console.WriteLine("接收状态：" + receiveData);
-        Console.WriteLine("接收的数据");
-        foreach (var b in buffer)
-        {
-            Console.WriteLine(b);
-        }
-
-        Console.WriteLine("转换后的数据");
-        if (buffer.Where((t, i) => t != command[i]).Any())
-        {
-            Console.WriteLine("写入失败");
-            return false;
-        }
-
-        Console.WriteLine("写入成功");
-
-        return true;
+        ReceiveData(buffer);
+        return !buffer.Where((t, i) => t != command[i]).Any();
     }
 
     /// <summary>
@@ -502,49 +445,27 @@ public class ModbusTcpClient : IDisposable
     {
         var boolArray = new bool[quantity];
         Array.Fill(boolArray, status == CoilStatus.ON);
-        return WriteMultipleCoils(address, boolArray);
+        return WriteMultipleCoils(address, quantity, boolArray);
     }
 
     /// <summary>
     /// 写入多个线圈
     /// </summary>
     /// <param name="address">线圈起始地址</param>
+    /// <param name="quantity">线圈数量</param>
     /// <param name="status">线圈值</param>
     /// <returns>是否写入成功</returns>
-    public bool WriteMultipleCoils(ushort address, bool[] status)
+    public bool WriteMultipleCoils(ushort address, ushort quantity, bool[] status)
     {
-        // var command = modbusCommand.GenerateCommand(FunctionCode.WRITING_MULTIPLE_COILS, address, status);
-        Console.WriteLine("发送的数据");
-        // foreach (var b in command)
-        // {
-        //     Console.WriteLine(b);
-        // }
+        var command = modbusCommand.GenerateCommand(FunctionCode.WRITING_MULTIPLE_COILS, address, quantity, status);
 
-        // if (!SendData(command))
-        // {
-        //     Console.WriteLine("发送失败");
-        //     return false;
-        // }
-        //
-        // Thread.Sleep(10);
-        // var buffer = new byte[12];
-        // var receiveData = ReceiveData(buffer);
-        // Console.WriteLine("接收状态：" + receiveData);
-        // Console.WriteLine("接收的数据");
-        // foreach (var b in buffer)
-        // {
-        //     Console.WriteLine(b);
-        // }
-        //
-        // Console.WriteLine("转换后的数据");
-        // if (buffer.Where((t, i) => t != command[i]).Any())
-        // {
-        //     Console.WriteLine("写入失败");
-        //     return false;
-        // }
-        //
-        // Console.WriteLine("写入成功");
+        if (!SendData(command))
+        {
+            return false;
+        }
 
-        return true;
+        Thread.Sleep(10);
+        var buffer = new byte[12];
+        return ReceiveData(buffer);
     }
 }

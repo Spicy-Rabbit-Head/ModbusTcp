@@ -4,6 +4,19 @@
         <TargetFramework>net6.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <AssemblyVersion>1.0</AssemblyVersion>
+        <FileVersion>1.0</FileVersion>
+        <PublicSign>false</PublicSign>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+      <Optimize>true</Optimize>
+      <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+      <DocumentationFile>bin\Debug\ModbusTcp.xml</DocumentationFile>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+      <DocumentationFile>bin\Release\ModbusTcp.xml</DocumentationFile>
     </PropertyGroup>
 
 </Project>
